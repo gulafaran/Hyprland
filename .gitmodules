@@ -9,5 +9,6 @@
 	url = https://github.com/wolfpld/tracy
 [submodule "subprojects/wlroots-hyprland"]
 	path = subprojects/wlroots-hyprland
-	url = https://github.com/hyprwm/wlroots-hyprland
+    url = https://github.com/gulafaran/wlroots-hyprland
+    branch = multi-gpu
 	ignore = dirty
