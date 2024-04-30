@@ -116,6 +116,15 @@ CKeybindManager::CKeybindManager() {
     });
 }
 
+CKeybindManager::~CKeybindManager() {
+    if (m_pXKBTranslationState) {
+        xkb_keymap_unref(xkb_state_get_keymap(m_pXKBTranslationState));
+        xkb_state_unref(m_pXKBTranslationState);
+
+        m_pXKBTranslationState = nullptr;
+    }
+}
+
 void CKeybindManager::addKeybind(SKeybind kb) {
     m_lKeybinds.push_back(kb);
 
