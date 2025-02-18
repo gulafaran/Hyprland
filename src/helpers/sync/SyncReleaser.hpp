@@ -18,9 +18,6 @@ class CSyncReleaser {
     CSyncReleaser(WP<CSyncTimeline> timeline_, uint64_t point_);
     ~CSyncReleaser();
 
-    // drops the releaser, will never signal anymore
-    void drop();
-
     // wait for this gpu job to finish before releasing
     void addReleaseSync(SP<CEGLSync> sync);
 

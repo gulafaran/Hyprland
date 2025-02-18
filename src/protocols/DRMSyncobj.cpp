@@ -24,8 +24,8 @@ CDRMSyncobjSurfaceResource::CDRMSyncobjSurfaceResource(SP<CWpLinuxDrmSyncobjSurf
         }
 
         auto timeline           = CDRMSyncobjTimelineResource::fromResource(timeline_);
-        pending.acquireTimeline = timeline;
-        pending.acquirePoint    = ((uint64_t)hi << 32) | (uint64_t)lo;
+        pendingAcquire.resource = timeline;
+        pendingAcquire.point    = ((uint64_t)hi << 32) | (uint64_t)lo;
     });
 
     resource->setSetReleasePoint([this](CWpLinuxDrmSyncobjSurfaceV1* r, wl_resource* timeline_, uint32_t hi, uint32_t lo) {
@@ -35,12 +35,13 @@ CDRMSyncobjSurfaceResource::CDRMSyncobjSurfaceResource(SP<CWpLinuxDrmSyncobjSurf
         }
 
         auto timeline           = CDRMSyncobjTimelineResource::fromResource(timeline_);
-        pending.releaseTimeline = timeline;
-        pending.releasePoint    = ((uint64_t)hi << 32) | (uint64_t)lo;
+        pendingRelease.resource = timeline;
+        pendingRelease.point    = ((uint64_t)hi << 32) | (uint64_t)lo;
+        releasePoints.emplace_back(makeUnique<CSyncReleaser>(pendingRelease.resource->timeline, pendingRelease.point));
     });
 
     listeners.surfacePrecommit = surface->events.precommit.registerListener([this](std::any d) {
-        if ((pending.acquireTimeline || pending.releaseTimeline) && !surface->pending.texture) {
+        if ((pendingAcquire.resource || pendingRelease.resource) && !surface->pending.texture) {
             resource->error(WP_LINUX_DRM_SYNCOBJ_SURFACE_V1_ERROR_NO_BUFFER, "Missing buffer");
             surface->pending.rejected = true;
             return;
@@ -49,55 +50,57 @@ CDRMSyncobjSurfaceResource::CDRMSyncobjSurfaceResource(SP<CWpLinuxDrmSyncobjSurf
         if (!surface->pending.newBuffer)
             return; // this commit does not change the state here
 
-        if (!!pending.acquireTimeline != !!pending.releaseTimeline) {
-            resource->error(pending.acquireTimeline ? WP_LINUX_DRM_SYNCOBJ_SURFACE_V1_ERROR_NO_RELEASE_POINT : WP_LINUX_DRM_SYNCOBJ_SURFACE_V1_ERROR_NO_ACQUIRE_POINT,
+        if (!!pendingAcquire.resource != !!pendingRelease.resource) {
+            resource->error(pendingAcquire.resource ? WP_LINUX_DRM_SYNCOBJ_SURFACE_V1_ERROR_NO_RELEASE_POINT : WP_LINUX_DRM_SYNCOBJ_SURFACE_V1_ERROR_NO_ACQUIRE_POINT,
                             "Missing timeline");
             surface->pending.rejected = true;
             return;
         }
 
-        if (!pending.acquireTimeline)
-            return;
-
-        if (pending.acquireTimeline && pending.releaseTimeline && pending.acquireTimeline == pending.releaseTimeline) {
-            if (pending.acquirePoint >= pending.releasePoint) {
+        if (pendingAcquire.resource && pendingRelease.resource && pendingAcquire.resource == pendingRelease.resource) {
+            if (pendingAcquire.point >= pendingRelease.point) {
                 resource->error(WP_LINUX_DRM_SYNCOBJ_SURFACE_V1_ERROR_CONFLICTING_POINTS, "Acquire and release points are on the same timeline, and acquire >= release");
                 surface->pending.rejected = true;
                 return;
             }
         }
 
-        // wait for the acquire timeline to materialize
-        auto materialized = pending.acquireTimeline->timeline->check(pending.acquirePoint, DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE);
-        if (!materialized.has_value()) {
-            LOGM(ERR, "Failed to check the acquire timeline");
-            resource->noMemory();
-            return;
-        }
-
-        if (materialized.value())
+        if (!pendingAcquire.resource)
             return;
 
-        surface->lockPendingState();
-        pending.acquireTimeline->timeline->addWaiter([this]() { surface->unlockPendingState(); }, pending.acquirePoint, DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE);
+        if (acquireWaiting)
+            return; // wait for acquire waiter to signal.
+
+        if (pendingAcquire.resource->timeline->addWaiter(
+                [this]() {
+                    if (surface.expired())
+                        return;
+
+                    surface->unlockPendingState();
+                    surface->commitPendingState();
+                    acquireWaiting = false;
+                },
+                pendingAcquire.point, 0u)) {
+            surface->lockPendingState();
+            acquireWaiting = true;
+        }
     });
 
-    listeners.surfaceCommit = surface->events.roleCommit.registerListener([this](std::any d) {
-        // apply timelines if new ones have been attached, otherwise don't touch
-        // the current ones
-        if (pending.releaseTimeline) {
-            current.releaseTimeline = pending.releaseTimeline;
-            current.releasePoint    = pending.releasePoint;
-        }
+    listeners.surfaceRoleCommit = surface->events.roleCommit.registerListener([this](std::any d) {
+        if (pendingAcquire.resource)
+            acquire = std::exchange(pendingAcquire, {});
 
-        if (pending.acquireTimeline) {
-            current.acquireTimeline = pending.acquireTimeline;
-            current.acquirePoint    = pending.acquirePoint;
-        }
-
-        pending.releaseTimeline.reset();
-        pending.acquireTimeline.reset();
+        if (pendingRelease.resource)
+            release = std::exchange(pendingRelease, {});
     });
+}
+
+CDRMSyncobjSurfaceResource::~CDRMSyncobjSurfaceResource() {
+    if (acquire.resource)
+        acquire.resource->timeline->removeAllWaiters();
+
+    if (pendingAcquire.resource)
+        pendingAcquire.resource->timeline->removeAllWaiters();
 }
 
 bool CDRMSyncobjSurfaceResource::good() {

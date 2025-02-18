@@ -2,6 +2,7 @@
 
 #include <vector>
 #include "WaylandProtocol.hpp"
+#include "helpers/sync/SyncReleaser.hpp"
 #include "linux-drm-syncobj-v1.hpp"
 #include "../helpers/signal/Signal.hpp"
 #include <hyprutils/os/FileDescriptor.hpp>
@@ -13,21 +14,32 @@ class CSyncTimeline;
 class CDRMSyncobjSurfaceResource {
   public:
     CDRMSyncobjSurfaceResource(SP<CWpLinuxDrmSyncobjSurfaceV1> resource_, SP<CWLSurfaceResource> surface_);
+    ~CDRMSyncobjSurfaceResource();
 
     bool                   good();
 
     WP<CWLSurfaceResource> surface;
-    struct {
-        WP<CDRMSyncobjTimelineResource> acquireTimeline, releaseTimeline;
-        uint64_t                        acquirePoint = 0, releasePoint = 0;
-    } current, pending;
+    struct STimeLineState {
+        WP<CDRMSyncobjTimelineResource> resource;
+        uint64_t                        point = 0;
+
+        STimeLineState()                                     = default;
+        STimeLineState(STimeLineState&&) noexcept            = default;
+        STimeLineState& operator=(STimeLineState&&) noexcept = default;
+        STimeLineState(const STimeLineState&)                = delete;
+        STimeLineState& operator=(const STimeLineState&)     = delete;
+        ~STimeLineState()                                    = default;
+    } acquire, release, pendingAcquire, pendingRelease;
+
+    std::vector<UP<CSyncReleaser>> releasePoints;
 
   private:
     SP<CWpLinuxDrmSyncobjSurfaceV1> resource;
+    bool                            acquireWaiting = false;
 
     struct {
         CHyprSignalListener surfacePrecommit;
-        CHyprSignalListener surfaceCommit;
+        CHyprSignalListener surfaceRoleCommit;
     } listeners;
 };
 

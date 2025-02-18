@@ -19,7 +19,3 @@ CSyncReleaser::~CSyncReleaser() {
 void CSyncReleaser::addReleaseSync(SP<CEGLSync> sync_) {
     sync = sync_;
 }
-
-void CSyncReleaser::drop() {
-    timeline.reset();
-}

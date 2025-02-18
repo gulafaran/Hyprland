@@ -43,8 +43,8 @@ class CHLBufferReference {
     CHLBufferReference(SP<IHLBuffer> buffer, SP<CWLSurfaceResource> surface);
     ~CHLBufferReference();
 
-    WP<IHLBuffer>     buffer;
-    SP<CSyncReleaser> releaser;
+    WP<IHLBuffer>                  buffer;
+    std::vector<UP<CSyncReleaser>> releaser;
 
   private:
     WP<CWLSurfaceResource> surface;

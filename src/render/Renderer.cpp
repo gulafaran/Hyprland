@@ -1574,10 +1574,11 @@ bool CHyprRenderer::commitPendingAndDoExplicitSync(PHLMONITOR pMonitor) {
         Debug::log(TRACE, "Explicit: can't add sync, EGLSync failed");
     else {
         for (auto const& e : explicitPresented) {
-            if (!e->current.buffer || !e->current.buffer->releaser)
+            if (!e->current.buffer || e->current.buffer->releaser.empty())
                 continue;
 
-            e->current.buffer->releaser->addReleaseSync(sync);
+            for (auto& r : e->current.buffer->releaser)
+                r->addReleaseSync(sync);
         }
     }
 

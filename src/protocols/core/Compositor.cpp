@@ -113,8 +113,7 @@ CWLSurfaceResource::CWLSurfaceResource(SP<CWlSurface> resource_) : resource(reso
             return;
         }
 
-        if (stateLocks <= 0)
-            commitPendingState();
+        commitPendingState();
     });
 
     resource->setDamage([this](CWlSurface* r, int32_t x, int32_t y, int32_t w, int32_t h) { pending.damage.add(CBox{x, y, w, h}); });
@@ -412,16 +411,17 @@ CRegion CWLSurfaceResource::accumulateCurrentBufferDamage() {
 }
 
 void CWLSurfaceResource::lockPendingState() {
-    stateLocks++;
+    stateLocked = true;
 }
 
 void CWLSurfaceResource::unlockPendingState() {
-    stateLocks--;
-    if (stateLocks <= 0)
-        commitPendingState();
+    stateLocked = false;
 }
 
 void CWLSurfaceResource::commitPendingState() {
+    if (stateLocked && syncobj)
+        return;
+
     static auto PDROP          = CConfigValue<Hyprlang::INT>("render:allow_early_buffer_release");
     auto const  previousBuffer = current.buffer;
     current                    = pending;
@@ -433,8 +433,8 @@ void CWLSurfaceResource::commitPendingState() {
 
     events.roleCommit.emit();
 
-    if (syncobj && syncobj->current.releaseTimeline && syncobj->current.releaseTimeline->timeline && current.buffer && current.buffer->buffer)
-        current.buffer->releaser = makeShared<CSyncReleaser>(syncobj->current.releaseTimeline->timeline, syncobj->current.releasePoint);
+    if (syncobj && syncobj->release.resource && syncobj->release.resource->timeline && current.buffer && current.buffer->buffer)
+        current.buffer->releaser = std::move(syncobj->releasePoints);
 
     if (current.texture)
         current.texture->m_eTransform = wlTransformToHyprutils(current.transform);

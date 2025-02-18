@@ -1315,10 +1315,10 @@ bool CMonitor::attemptDirectScanout() {
     auto explicitOptions = g_pHyprRenderer->getExplicitSyncSettings(output);
 
     // wait for the explicit fence if present, and if kms explicit is allowed
-    bool DOEXPLICIT = PSURFACE->syncobj && PSURFACE->syncobj->current.acquireTimeline && PSURFACE->syncobj->current.acquireTimeline->timeline && explicitOptions.explicitKMSEnabled;
+    bool            DOEXPLICIT = PSURFACE->syncobj && PSURFACE->syncobj->acquire.resource && PSURFACE->syncobj->acquire.resource->timeline && explicitOptions.explicitKMSEnabled;
     CFileDescriptor explicitWaitFD;
     if (DOEXPLICIT) {
-        explicitWaitFD = PSURFACE->syncobj->current.acquireTimeline->timeline->exportAsSyncFileFD(PSURFACE->syncobj->current.acquirePoint);
+        explicitWaitFD = PSURFACE->syncobj->acquire.resource->timeline->exportAsSyncFileFD(PSURFACE->syncobj->acquire.point);
         if (!explicitWaitFD.isValid())
             Debug::log(TRACE, "attemptDirectScanout: failed to acquire an explicit wait fd");
     }
@@ -1351,18 +1351,6 @@ bool CMonitor::attemptDirectScanout() {
         if (lastScanout.expired()) {
             lastScanout = PCANDIDATE;
             Debug::log(LOG, "Entered a direct scanout to {:x}: \"{}\"", (uintptr_t)PCANDIDATE.get(), PCANDIDATE->m_szTitle);
-        }
-
-        // delay explicit sync feedback until kms release of the buffer
-        if (DOEXPLICIT) {
-            Debug::log(TRACE, "attemptDirectScanout: Delaying explicit sync release feedback until kms release");
-            PSURFACE->current.buffer->releaser->drop();
-
-            PSURFACE->current.buffer->buffer->hlEvents.backendRelease2 = PSURFACE->current.buffer->buffer->events.backendRelease.registerListener([PSURFACE](std::any d) {
-                const bool DOEXPLICIT = PSURFACE->syncobj && PSURFACE->syncobj->current.releaseTimeline && PSURFACE->syncobj->current.releaseTimeline->timeline;
-                if (DOEXPLICIT)
-                    PSURFACE->syncobj->current.releaseTimeline->timeline->signal(PSURFACE->syncobj->current.releasePoint);
-            });
         }
     } else {
         Debug::log(TRACE, "attemptDirectScanout: failed to scanout surface");
