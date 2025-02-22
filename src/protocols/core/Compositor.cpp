@@ -434,7 +434,7 @@ void CWLSurfaceResource::commitPendingState() {
     events.roleCommit.emit();
 
     if (syncobj && syncobj->release.resource && syncobj->release.resource->timeline && current.buffer && current.buffer->buffer)
-        current.buffer->releaser = std::move(syncobj->releasePoints);
+        current.buffer->releaser.swap(syncobj->releasePoints);
 
     if (current.texture)
         current.texture->m_eTransform = wlTransformToHyprutils(current.transform);
