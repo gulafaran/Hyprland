@@ -88,11 +88,15 @@ CDRMSyncobjSurfaceResource::CDRMSyncobjSurfaceResource(UP<CWpLinuxDrmSyncobjSurf
     });
 
     listeners.surfaceRoleCommit = surface->events.roleCommit.registerListener([this](std::any d) {
-        if (pendingAcquire.resource)
-            acquire = std::exchange(pendingAcquire, {});
+        if (pendingAcquire.resource) {
+            acquire        = std::move(pendingAcquire);
+            pendingAcquire = {};
+        }
 
-        if (pendingRelease.resource)
-            release = std::exchange(pendingRelease, {});
+        if (pendingRelease.resource) {
+            release        = std::move(pendingRelease);
+            pendingRelease = {};
+        }
     });
 }
 

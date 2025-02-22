@@ -11,7 +11,6 @@
 #include "../PresentationTime.hpp"
 #include "../DRMSyncobj.hpp"
 #include "../../render/Renderer.hpp"
-#include "config/ConfigValue.hpp"
 #include <cstring>
 
 class CDefaultSurfaceRole : public ISurfaceRole {
@@ -422,14 +421,12 @@ void CWLSurfaceResource::commitPendingState() {
     if (stateLocked && syncobj)
         return;
 
-    static auto PDROP          = CConfigValue<Hyprlang::INT>("render:allow_early_buffer_release");
-    auto const  previousBuffer = current.buffer;
-    current                    = pending;
+    auto const previousBuffer = current.buffer;
+    current                   = pending;
     pending.damage.clear();
     pending.bufferDamage.clear();
     pending.newBuffer = false;
-    if (!*PDROP)
-        dropPendingBuffer(); // at this point current.buffer holds the same SP and we don't use pending anymore
+    dropPendingBuffer(); // at this point current.buffer holds the same SP and we don't use pending anymore
 
     events.roleCommit.emit();
 
@@ -447,14 +444,6 @@ void CWLSurfaceResource::commitPendingState() {
         // TODO: don't update the entire texture
         if (role->role() == SURFACE_ROLE_CURSOR && !DAMAGE.empty())
             updateCursorShm(DAMAGE);
-
-        // release the buffer if it's synchronous as update() has done everything thats needed
-        // so we can let the app know we're done.
-        // Some clients aren't ready to receive a release this early. Should be fine to release it on the next commitPendingState.
-        if (current.buffer->buffer->isSynchronous() && *PDROP) {
-            dropCurrentBuffer();
-            dropPendingBuffer(); // at this point current.buffer holds the same SP and we don't use pending anymore
-        }
     }
 
     // TODO: we should _accumulate_ and not replace above if sync
@@ -477,6 +466,12 @@ void CWLSurfaceResource::commitPendingState() {
             },
             nullptr);
     }
+
+    // fifo mode requires us to drop the current buffer before next commit
+    // otherwise release points arent being sent and we dont recieve new acquire
+    // and release points.
+    if (syncobj)
+        dropCurrentBuffer();
 
     // for async buffers, we can only release the buffer once we are unrefing it from current.
     // if the backend took it, ref it with the lambda. Otherwise, the end of this scope will release it.
