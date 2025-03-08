@@ -10,12 +10,12 @@ CWLBufferResource::CWLBufferResource(SP<CWlBuffer> resource_) : resource(resourc
         return;
 
     resource->setOnDestroy([this](CWlBuffer* r) {
-        if (buffer.expired())
+        if (!buffer)
             return;
         buffer->events.destroy.emit();
     });
     resource->setDestroy([this](CWlBuffer* r) {
-        if (buffer.expired())
+        if (!buffer)
             return;
         buffer->events.destroy.emit();
     });

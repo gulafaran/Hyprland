@@ -18,7 +18,7 @@ class CWLBufferResource {
     void                         sendRelease();
     wl_resource*                 getResource();
 
-    WP<IHLBuffer>                buffer;
+    SP<IHLBuffer>                buffer;
 
     WP<CWLBufferResource>        self;
 
