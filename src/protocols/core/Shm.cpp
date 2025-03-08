@@ -4,7 +4,6 @@
 #include <sys/stat.h>
 #include <drm_fourcc.h>
 #include "../../render/Texture.hpp"
-#include "../types/WLBuffer.hpp"
 #include "../../helpers/Format.hpp"
 #include "../../render/Renderer.hpp"
 using namespace Hyprutils::OS;
@@ -24,7 +23,7 @@ CWLSHMBuffer::CWLSHMBuffer(SP<CWLSHMPoolResource> pool_, uint32_t id, int32_t of
 
     texture = makeShared<CTexture>(NFormatUtils::shmToDRM(fmt), (uint8_t*)pool->data + offset, stride, size_);
 
-    resource = CWLBufferResource::create(makeShared<CWlBuffer>(pool_->resource->client(), 1, id));
+    resource = g_pWLBufferManager->create(makeUnique<CWlBuffer>(pool_->resource->client(), 1, id));
 
     listeners.bufferResourceDestroy = events.destroy.registerListener([this](std::any d) {
         listeners.bufferResourceDestroy.reset();

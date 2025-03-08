@@ -2,11 +2,13 @@
 
 #include "../../defines.hpp"
 #include "../../render/Texture.hpp"
-#include "./WLBuffer.hpp"
+#include "managers/WLBufferManager.hpp"
+#include "protocols/core/Compositor.hpp"
 
 #include <aquamarine/buffer/Buffer.hpp>
 
 class CSyncReleaser;
+class CWLBufferResource;
 
 class IHLBuffer : public Aquamarine::IBuffer {
   public:
@@ -16,16 +18,16 @@ class IHLBuffer : public Aquamarine::IBuffer {
     virtual void                          update(const CRegion& damage) = 0;
     virtual bool                          isSynchronous()               = 0; // whether the updates to this buffer are synchronous, aka happen over cpu
     virtual bool                          good()                        = 0;
-    virtual void                          sendRelease();
-    virtual void                          lock();
-    virtual void                          unlock();
-    virtual bool                          locked();
+    //virtual void                          sendRelease();
+    virtual void          lock();
+    virtual void          unlock();
+    virtual bool          locked();
 
-    void                                  unlockOnBufferRelease(WP<CWLSurfaceResource> surf /* optional */);
+    void                  unlockOnBufferRelease(WP<CWLSurfaceResource> surf /* optional */);
 
-    SP<CTexture>                          texture;
-    bool                                  opaque = false;
-    SP<CWLBufferResource>                 resource;
+    SP<CTexture>          texture;
+    bool                  opaque = false;
+    WP<CWLBufferResource> resource;
 
     struct {
         CHyprSignalListener backendRelease;
@@ -43,7 +45,7 @@ class CHLBufferReference {
     CHLBufferReference(SP<IHLBuffer> buffer, SP<CWLSurfaceResource> surface);
     ~CHLBufferReference();
 
-    WP<IHLBuffer>     buffer;
+    SP<IHLBuffer>     buffer;
     SP<CSyncReleaser> releaser;
 
   private:

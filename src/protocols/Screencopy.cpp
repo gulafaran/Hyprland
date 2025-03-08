@@ -7,7 +7,6 @@
 #include "../render/OpenGL.hpp"
 #include "../helpers/Monitor.hpp"
 #include "core/Output.hpp"
-#include "types/WLBuffer.hpp"
 #include "types/Buffer.hpp"
 #include "../helpers/Format.hpp"
 
@@ -93,7 +92,7 @@ void CScreencopyFrame::copy(CZwlrScreencopyFrameV1* pFrame, wl_resource* buffer_
         return;
     }
 
-    const auto PBUFFER = CWLBufferResource::fromResource(buffer_);
+    const auto& PBUFFER = g_pWLBufferManager->fromResource(buffer_);
     if UNLIKELY (!PBUFFER) {
         LOGM(ERR, "Invalid buffer in {:x}", (uintptr_t)this);
         resource->error(ZWLR_SCREENCOPY_FRAME_V1_ERROR_INVALID_BUFFER, "invalid buffer");
@@ -101,7 +100,7 @@ void CScreencopyFrame::copy(CZwlrScreencopyFrameV1* pFrame, wl_resource* buffer_
         return;
     }
 
-    PBUFFER->buffer->lock();
+    //PBUFFER->buffer->lock();
 
     if UNLIKELY (PBUFFER->buffer->size != box.size()) {
         LOGM(ERR, "Invalid dimensions in {:x}", (uintptr_t)this);

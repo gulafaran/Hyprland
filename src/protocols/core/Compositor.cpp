@@ -1,7 +1,6 @@
 #include "Compositor.hpp"
 #include "Output.hpp"
 #include "Seat.hpp"
-#include "../types/WLBuffer.hpp"
 #include <algorithm>
 #include <ranges>
 #include "Subcompositor.hpp"
@@ -76,7 +75,7 @@ CWLSurfaceResource::CWLSurfaceResource(SP<CWlSurface> resource_) : resource(reso
             pending.buffer.reset();
             pending.texture.reset();
         } else {
-            auto res           = CWLBufferResource::fromResource(buffer);
+            auto res           = g_pWLBufferManager->fromResource(buffer);
             pending.buffer     = res && res->buffer ? makeShared<CHLBufferReference>(res->buffer, self.lock()) : nullptr;
             pending.size       = res && res->buffer ? res->buffer->size : Vector2D{};
             pending.texture    = res && res->buffer ? res->buffer->texture : nullptr;

@@ -3,7 +3,6 @@
 #include "ForeignToplevelWlr.hpp"
 #include "../managers/PointerManager.hpp"
 #include "../managers/SeatManager.hpp"
-#include "types/WLBuffer.hpp"
 #include "types/Buffer.hpp"
 #include "../helpers/Format.hpp"
 #include "../managers/EventManager.hpp"
@@ -152,14 +151,14 @@ void CToplevelExportFrame::copy(CHyprlandToplevelExportFrameV1* pFrame, wl_resou
         return;
     }
 
-    const auto PBUFFER = CWLBufferResource::fromResource(buffer_);
+    const auto& PBUFFER = g_pWLBufferManager->fromResource(buffer_);
     if UNLIKELY (!PBUFFER) {
         resource->error(HYPRLAND_TOPLEVEL_EXPORT_FRAME_V1_ERROR_INVALID_BUFFER, "invalid buffer");
         PROTO::toplevelExport->destroyResource(this);
         return;
     }
 
-    PBUFFER->buffer->lock();
+    //PBUFFER->buffer->lock();
 
     if UNLIKELY (PBUFFER->buffer->size != box.size()) {
         resource->error(HYPRLAND_TOPLEVEL_EXPORT_FRAME_V1_ERROR_INVALID_BUFFER, "invalid buffer dimensions");

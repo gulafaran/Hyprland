@@ -1,5 +1,4 @@
 #include "DMABuffer.hpp"
-#include "WLBuffer.hpp"
 #include "../../desktop/LayerSurface.hpp"
 #include "../../render/Renderer.hpp"
 #include "../../helpers/Format.hpp"
@@ -13,7 +12,7 @@ CDMABuffer::CDMABuffer(uint32_t id, wl_client* client, Aquamarine::SDMABUFAttrs 
     });
 
     size     = attrs.size;
-    resource = CWLBufferResource::create(makeShared<CWlBuffer>(client, 1, id));
+    resource = g_pWLBufferManager->create(makeUnique<CWlBuffer>(client, 1, id));
 
     auto eglImage = g_pHyprOpenGL->createEGLImage(attrs);
 

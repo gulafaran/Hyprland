@@ -14,7 +14,7 @@ CSinglePixelBuffer::CSinglePixelBuffer(uint32_t id, wl_client* client, CHyprColo
 
     texture = makeShared<CTexture>(DRM_FORMAT_ARGB8888, (uint8_t*)&color, 4, Vector2D{1, 1});
 
-    resource = CWLBufferResource::create(makeShared<CWlBuffer>(client, 1, id));
+    resource = g_pWLBufferManager->create(makeUnique<CWlBuffer>(client, 1, id));
 
     success = texture->m_iTexID;
 

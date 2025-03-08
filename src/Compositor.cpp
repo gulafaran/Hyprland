@@ -589,6 +589,7 @@ void CCompositor::cleanup() {
     g_pWatchdog.reset();
     g_pXWaylandManager.reset();
     g_pPointerManager.reset();
+    g_pWLBufferManager.reset();
     g_pSeatManager.reset();
     g_pHyprCtl.reset();
     g_pEventLoopManager.reset();
@@ -648,6 +649,9 @@ void CCompositor::initManagers(eManagersInitStage stage) {
 
             Debug::log(LOG, "Creating the EventManager!");
             g_pEventManager = makeUnique<CEventManager>();
+
+            Debug::log(LOG, "Creating the WLBufferManager!");
+            g_pWLBufferManager = makeUnique<CWLBufferManager>();
         } break;
         case STAGE_BASICINIT: {
             Debug::log(LOG, "Creating the CHyprOpenGLImpl!");

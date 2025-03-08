@@ -1,13 +1,13 @@
 #include "Buffer.hpp"
 
 IHLBuffer::~IHLBuffer() {
-    if (locked() && resource)
+    if (resource)
         sendRelease();
 }
 
-void IHLBuffer::sendRelease() {
-    resource->sendRelease();
-}
+//void IHLBuffer::sendRelease() {
+//    resource->sendRelease();
+//}
 
 void IHLBuffer::lock() {
     nLocks++;
@@ -38,8 +38,5 @@ CHLBufferReference::CHLBufferReference(SP<IHLBuffer> buffer_, SP<CWLSurfaceResou
 }
 
 CHLBufferReference::~CHLBufferReference() {
-    if (buffer.expired())
-        return;
-
     buffer->unlock();
 }

@@ -9,7 +9,6 @@
 #include <sys/stat.h>
 #include "core/Compositor.hpp"
 #include "types/DMABuffer.hpp"
-#include "types/WLBuffer.hpp"
 #include "../managers/HookSystemManager.hpp"
 #include "../render/OpenGL.hpp"
 #include "../Compositor.hpp"

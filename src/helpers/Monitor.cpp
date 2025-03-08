@@ -1306,7 +1306,7 @@ bool CMonitor::attemptDirectScanout() {
         drmFormat = params.format;
     }
 
-    output->state->setBuffer(PSURFACE->current.buffer->buffer.lock());
+    output->state->setBuffer(PSURFACE->current.buffer->buffer);
     output->state->setPresentationMode(tearingState.activelyTearing ? Aquamarine::eOutputPresentationMode::AQ_OUTPUT_PRESENTATION_IMMEDIATE :
                                                                       Aquamarine::eOutputPresentationMode::AQ_OUTPUT_PRESENTATION_VSYNC);
 

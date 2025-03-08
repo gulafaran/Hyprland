@@ -27,6 +27,7 @@ class CDRMSyncobjSurfaceResource;
 class CColorManagementSurface;
 class CFrogColorManagementSurface;
 class CContentType;
+class CHLBufferReference;
 
 class CWLCallbackResource {
   public:
