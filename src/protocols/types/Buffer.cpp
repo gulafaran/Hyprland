@@ -56,7 +56,7 @@ std::tuple<uint8_t*, uint32_t, size_t> CHLAttachedBuffer::beginDataPtr(uint32_t 
 }
 
 void CHLAttachedBuffer::endDataPtr() {
-    return buffer->endDataPtr();
+    buffer->endDataPtr();
 }
 
 bool CHLAttachedBuffer::getOpaque() {
