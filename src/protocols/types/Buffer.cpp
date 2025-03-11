@@ -4,10 +4,6 @@
 
 IHLBuffer::~IHLBuffer() {}
 
-void IHLBuffer::sendRelease() {
-    resource->sendRelease();
-}
-
 const SP<CTexture>& IHLBuffer::getTexture() {
     return texture;
 }
@@ -47,8 +43,20 @@ bool CHLAttachedBuffer::good() {
     return buffer->good();
 }
 
-void CHLAttachedBuffer::sendRelease() {
-    buffer->sendRelease();
+Aquamarine::SDMABUFAttrs CHLAttachedBuffer::dmabuf() {
+    return buffer->dmabuf();
+}
+
+Aquamarine::SSHMAttrs CHLAttachedBuffer::shm() {
+    return buffer->shm();
+}
+
+std::tuple<uint8_t*, uint32_t, size_t> CHLAttachedBuffer::beginDataPtr(uint32_t flags) {
+    return buffer->beginDataPtr(flags);
+}
+
+void CHLAttachedBuffer::endDataPtr() {
+    return buffer->endDataPtr();
 }
 
 bool CHLAttachedBuffer::getOpaque() {
