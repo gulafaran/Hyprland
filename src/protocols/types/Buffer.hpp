@@ -18,37 +18,39 @@ class IHLBuffer : public Aquamarine::IBuffer {
     virtual bool                          isSynchronous()               = 0; // whether the updates to this buffer are synchronous, aka happen over cpu
     virtual bool                          good()                        = 0;
     virtual void                          sendRelease();
-    virtual void                          lock();
-    virtual void                          unlock();
-    virtual bool                          locked();
 
-    void                                  onBackendRelease(const std::function<void()>& fn);
+    virtual const SP<CTexture>&           getTexture();
+    virtual const SP<CWLBufferResource>&  getResource();
 
-    SP<CTexture>                          texture;
-    bool                                  opaque = false;
-    SP<CWLBufferResource>                 resource;
-
-    struct {
-        CHyprSignalListener backendRelease;
-        CHyprSignalListener backendRelease2; // for explicit ds
-    } hlEvents;
-
-  private:
-    int nLocks = 0;
+  protected:
+    SP<CTexture>          texture;
+    SP<CWLBufferResource> resource;
 };
 
 // for ref-counting. Releases in ~dtor
-// surface optional
-class CHLBufferReference {
+class CHLAttachedBuffer : public IHLBuffer {
   public:
-    CHLBufferReference(SP<IHLBuffer> buffer, SP<CWLSurfaceResource> surface);
-    ~CHLBufferReference();
+    explicit CHLAttachedBuffer(SP<IHLBuffer> buffer);
+    virtual ~CHLAttachedBuffer();
 
-    WP<IHLBuffer>          buffer;
-    UP<CDRMSyncPointState> acquire;
-    UP<CDRMSyncPointState> release;
-    UP<CSyncReleaser>      syncReleaser;
+    virtual Aquamarine::eBufferCapability   caps();
+    virtual Aquamarine::eBufferType         type();
+    virtual void                            update(const CRegion& damage);
+    virtual bool                            isSynchronous(); // whether the updates to this buffer are synchronous, aka happen over cpu
+    virtual bool                            good();
+    virtual void                            sendRelease();
+
+    virtual bool                            getOpaque();
+    virtual Hyprutils::Math::Vector2D&      getSize();
+    virtual Aquamarine::CAttachmentManager& getAttachments();
+    virtual Hyprutils::Signal::CSignal&     getDestroyEvent();
+    virtual const SP<CTexture>&             getTexture();
+    virtual const SP<CWLBufferResource>&    getResource();
+
+    UP<CDRMSyncPointState>                  acquire;
+    UP<CDRMSyncPointState>                  release;
+    UP<CSyncReleaser>                       syncReleaser;
 
   private:
-    WP<CWLSurfaceResource> surface;
+    SP<IHLBuffer> buffer;
 };

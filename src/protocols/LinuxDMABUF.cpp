@@ -99,9 +99,9 @@ CDMABUFFormatTable::CDMABUFFormatTable(SDMABUFTranche _rendererTranche, std::vec
 CLinuxDMABuffer::CLinuxDMABuffer(uint32_t id, wl_client* client, Aquamarine::SDMABUFAttrs attrs) {
     buffer = makeShared<CDMABuffer>(id, client, attrs);
 
-    buffer->resource->buffer = buffer;
+    buffer->getResource()->buffer = buffer;
 
-    listeners.bufferResourceDestroy = buffer->events.destroy.registerListener([this](std::any d) {
+    listeners.bufferResourceDestroy = buffer->getDestroyEvent().registerListener([this](std::any d) {
         listeners.bufferResourceDestroy.reset();
         PROTO::linuxDma->destroyResource(this);
     });
@@ -111,8 +111,8 @@ CLinuxDMABuffer::CLinuxDMABuffer(uint32_t id, wl_client* client, Aquamarine::SDM
 }
 
 CLinuxDMABuffer::~CLinuxDMABuffer() {
-    if (buffer && buffer->resource)
-        buffer->resource->sendRelease();
+    if (buffer && buffer->getResource())
+        buffer->getResource()->sendRelease();
 
     buffer.reset();
     listeners.bufferResourceDestroy.reset();
@@ -225,7 +225,7 @@ void CLinuxDMABUFParamsResource::create(uint32_t id) {
     }
 
     if (!id)
-        resource->sendCreated(PROTO::linuxDma->m_vBuffers.back()->buffer->resource->getResource());
+        resource->sendCreated(PROTO::linuxDma->m_vBuffers.back()->buffer->getResource()->getResource());
 
     createdBuffer = buf;
 }

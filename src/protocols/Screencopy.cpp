@@ -12,11 +12,9 @@
 #include "../helpers/Format.hpp"
 
 #include <algorithm>
+#include <hyprutils/memory/SharedPtr.hpp>
 
-CScreencopyFrame::~CScreencopyFrame() {
-    if (buffer && buffer->locked())
-        buffer->unlock();
-}
+CScreencopyFrame::~CScreencopyFrame() {}
 
 CScreencopyFrame::CScreencopyFrame(SP<CZwlrScreencopyFrameV1> resource_, int32_t overlay_cursor, wl_resource* output, CBox box_) : resource(resource_) {
     if UNLIKELY (!good())
@@ -94,16 +92,14 @@ void CScreencopyFrame::copy(CZwlrScreencopyFrameV1* pFrame, wl_resource* buffer_
     }
 
     const auto PBUFFER = CWLBufferResource::fromResource(buffer_);
-    if UNLIKELY (!PBUFFER) {
+    if UNLIKELY (!PBUFFER || !PBUFFER->buffer) {
         LOGM(ERR, "Invalid buffer in {:x}", (uintptr_t)this);
         resource->error(ZWLR_SCREENCOPY_FRAME_V1_ERROR_INVALID_BUFFER, "invalid buffer");
         PROTO::screencopy->destroyResource(this);
         return;
     }
 
-    PBUFFER->buffer->lock();
-
-    if UNLIKELY (PBUFFER->buffer->size != box.size()) {
+    if UNLIKELY (PBUFFER->buffer->getSize() != box.size()) {
         LOGM(ERR, "Invalid dimensions in {:x}", (uintptr_t)this);
         resource->error(ZWLR_SCREENCOPY_FRAME_V1_ERROR_INVALID_BUFFER, "invalid buffer dimensions");
         PROTO::screencopy->destroyResource(this);
@@ -145,7 +141,7 @@ void CScreencopyFrame::copy(CZwlrScreencopyFrameV1* pFrame, wl_resource* buffer_
         return;
     }
 
-    buffer = PBUFFER->buffer;
+    buffer = makeShared<CHLAttachedBuffer>(PBUFFER->buffer.lock());
 
     PROTO::screencopy->m_vFramesAwaitingWrite.emplace_back(self);
 
@@ -191,7 +187,7 @@ void CScreencopyFrame::share() {
     resource->sendFlags((zwlrScreencopyFrameV1Flags)0);
     if (withDamage) {
         // TODO: add a damage ring for this.
-        resource->sendDamage(0, 0, buffer->size.x, buffer->size.y);
+        resource->sendDamage(0, 0, buffer->getSize().x, buffer->getSize().y);
     }
 
     uint32_t tvSecHi = (sizeof(now.tv_sec) > 4) ? now.tv_sec >> 32 : 0;

@@ -73,10 +73,7 @@ bool CToplevelExportClient::good() {
     return resource->resource();
 }
 
-CToplevelExportFrame::~CToplevelExportFrame() {
-    if (buffer && buffer->locked())
-        buffer->unlock();
-}
+CToplevelExportFrame::~CToplevelExportFrame() {}
 
 CToplevelExportFrame::CToplevelExportFrame(SP<CHyprlandToplevelExportFrameV1> resource_, int32_t overlayCursor_, PHLWINDOW pWindow_) : resource(resource_), pWindow(pWindow_) {
     if UNLIKELY (!good())
@@ -153,15 +150,13 @@ void CToplevelExportFrame::copy(CHyprlandToplevelExportFrameV1* pFrame, wl_resou
     }
 
     const auto PBUFFER = CWLBufferResource::fromResource(buffer_);
-    if UNLIKELY (!PBUFFER) {
+    if UNLIKELY (!PBUFFER || !PBUFFER->buffer) {
         resource->error(HYPRLAND_TOPLEVEL_EXPORT_FRAME_V1_ERROR_INVALID_BUFFER, "invalid buffer");
         PROTO::toplevelExport->destroyResource(this);
         return;
     }
 
-    PBUFFER->buffer->lock();
-
-    if UNLIKELY (PBUFFER->buffer->size != box.size()) {
+    if UNLIKELY (PBUFFER->buffer->getSize() != box.size()) {
         resource->error(HYPRLAND_TOPLEVEL_EXPORT_FRAME_V1_ERROR_INVALID_BUFFER, "invalid buffer dimensions");
         PROTO::toplevelExport->destroyResource(this);
         return;
@@ -197,7 +192,7 @@ void CToplevelExportFrame::copy(CHyprlandToplevelExportFrameV1* pFrame, wl_resou
         return;
     }
 
-    buffer = PBUFFER->buffer;
+    buffer = makeShared<CHLAttachedBuffer>(PBUFFER->buffer.lock());
 
     m_ignoreDamage = ignoreDamage;
 

@@ -163,7 +163,7 @@ CWLSHMPoolResource::CWLSHMPoolResource(SP<CWlShmPool> resource_, CFileDescriptor
         }
 
         // append instance so that buffer knows its owner
-        RESOURCE->resource->buffer = RESOURCE;
+        RESOURCE->getResource()->buffer = RESOURCE;
     });
 
     if UNLIKELY (pool->data == MAP_FAILED)

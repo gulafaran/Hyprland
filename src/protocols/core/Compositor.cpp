@@ -77,10 +77,10 @@ CWLSurfaceResource::CWLSurfaceResource(SP<CWlSurface> resource_) : resource(reso
             pending.texture.reset();
         } else {
             auto res           = CWLBufferResource::fromResource(buffer);
-            pending.buffer     = res && res->buffer ? makeShared<CHLBufferReference>(res->buffer.lock(), self.lock()) : nullptr;
-            pending.size       = res && res->buffer ? res->buffer->size : Vector2D{};
-            pending.texture    = res && res->buffer ? res->buffer->texture : nullptr;
-            pending.bufferSize = res && res->buffer ? res->buffer->size : Vector2D{};
+            pending.buffer     = res && res->buffer ? makeShared<CHLAttachedBuffer>(res->buffer.lock()) : nullptr;
+            pending.size       = res && res->buffer ? res->buffer->getSize() : Vector2D{};
+            pending.texture    = res && res->buffer ? res->buffer->getTexture() : nullptr;
+            pending.bufferSize = res && res->buffer ? res->buffer->getSize() : Vector2D{};
         }
 
         Vector2D oldBufSize = current.buffer ? current.bufferSize : Vector2D{};
@@ -440,9 +440,9 @@ void CWLSurfaceResource::commitPendingState(SSurfaceState& state) {
     if (current.texture)
         current.texture->m_eTransform = wlTransformToHyprutils(current.transform);
 
-    if (current.buffer && current.buffer->buffer) {
+    if (current.buffer) {
         const auto DAMAGE = accumulateCurrentBufferDamage();
-        current.buffer->buffer->update(DAMAGE);
+        current.buffer->update(DAMAGE);
 
         // if the surface is a cursor, update the shm buffer
         // TODO: don't update the entire texture
@@ -473,43 +473,35 @@ void CWLSurfaceResource::commitPendingState(SSurfaceState& state) {
 
     // release the buffer if it's synchronous as update() has done everything thats needed
     // so we can let the app know we're done.
-    if (!syncobj && current.buffer && current.buffer->buffer && current.buffer->buffer->isSynchronous()) {
+    if (!syncobj && current.buffer && current.buffer->isSynchronous()) {
         //dropCurrentBuffer(); // lets not drop it at all, it will get dropped on next commit if a new buffer arrives.
         // solves flickering on nonsyncobj apps on explicit sync.
-    }
-
-    // for async buffers, we can only release the buffer once we are unrefing it from current.
-    // if the backend took it, ref it with the lambda. Otherwise, the end of this scope will release it.
-    if (current.buffer && current.buffer->buffer && !current.buffer->buffer->isSynchronous()) {
-        if (current.buffer->buffer->lockedByBackend && !current.buffer->buffer->hlEvents.backendRelease) {
-            current.buffer->buffer->lock();
-            current.buffer->buffer->onBackendRelease([this]() { current.buffer->buffer->unlock(); });
-        }
     }
 }
 
 void CWLSurfaceResource::updateCursorShm(CRegion damage) {
-    auto buf = current.buffer ? current.buffer->buffer : WP<IHLBuffer>{};
+    auto buf = current.buffer;
 
     if UNLIKELY (!buf)
         return;
 
     auto& shmData  = CCursorSurfaceRole::cursorPixelData(self.lock());
     auto  shmAttrs = buf->shm();
+    auto  size     = buf->getSize();
 
     if (!shmAttrs.success) {
         LOGM(TRACE, "updateCursorShm: ignoring, not a shm buffer");
         return;
     }
 
-    damage.intersect(CBox{0, 0, buf->size.x, buf->size.y});
+    damage.intersect(CBox{0, 0, size.x, size.y});
 
     // no need to end, shm.
     auto [pixelData, fmt, bufLen] = buf->beginDataPtr(0);
 
     shmData.resize(bufLen);
 
-    if (const auto RECTS = damage.getRects(); RECTS.size() == 1 && RECTS.at(0).x2 == buf->size.x && RECTS.at(0).y2 == buf->size.y)
+    if (const auto RECTS = damage.getRects(); RECTS.size() == 1 && RECTS.at(0).x2 == size.x && RECTS.at(0).y2 == size.y)
         memcpy(shmData.data(), pixelData, bufLen);
     else {
         for (auto& box : damage.getRects()) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../defines.hpp"
+#include "protocols/types/Buffer.hpp"
 #include "wlr-screencopy-unstable-v1.hpp"
 #include "WaylandProtocol.hpp"
 
@@ -65,7 +66,7 @@ class CScreencopyFrame {
     bool                       withDamage      = false;
     bool                       lockedSWCursors = false;
 
-    WP<IHLBuffer>              buffer;
+    WP<CHLAttachedBuffer>      buffer;
     bool                       bufferDMA    = false;
     uint32_t                   shmFormat    = 0;
     uint32_t                   dmabufFormat = 0;

@@ -11,10 +11,10 @@ CMesaDRMBufferResource::CMesaDRMBufferResource(uint32_t id, wl_client* client, A
         LOGM(LOG, " | plane {}: mod {} fd {} stride {} offset {}", i, attrs_.modifier, attrs_.fds[i], attrs_.strides[i], attrs_.offsets[i]);
     }
 
-    buffer                   = makeShared<CDMABuffer>(id, client, attrs_);
-    buffer->resource->buffer = buffer;
+    buffer                        = makeShared<CDMABuffer>(id, client, attrs_);
+    buffer->getResource()->buffer = buffer;
 
-    listeners.bufferResourceDestroy = buffer->events.destroy.registerListener([this](std::any d) {
+    listeners.bufferResourceDestroy = buffer->getDestroyEvent().registerListener([this](std::any d) {
         listeners.bufferResourceDestroy.reset();
         PROTO::mesaDRM->destroyResource(this);
     });
@@ -24,8 +24,8 @@ CMesaDRMBufferResource::CMesaDRMBufferResource(uint32_t id, wl_client* client, A
 }
 
 CMesaDRMBufferResource::~CMesaDRMBufferResource() {
-    if (buffer && buffer->resource)
-        buffer->resource->sendRelease();
+    if (buffer && buffer->getResource())
+        buffer->getResource()->sendRelease();
     buffer.reset();
     listeners.bufferResourceDestroy.reset();
 }
@@ -94,7 +94,7 @@ CMesaDRMResource::CMesaDRMResource(SP<CWlDrm> resource_) : resource(resource_) {
             }
 
             // append instance so that buffer knows its owner
-            RESOURCE->buffer->resource->buffer = RESOURCE->buffer;
+            RESOURCE->buffer->getResource()->buffer = RESOURCE->buffer;
         });
 
     resource->sendDevice(PROTO::mesaDRM->nodeName.c_str());

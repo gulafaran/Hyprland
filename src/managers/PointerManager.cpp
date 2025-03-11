@@ -114,7 +114,7 @@ void CPointerManager::setCursorBuffer(SP<Aquamarine::IBuffer> buf, const Vector2
     resetCursorImage(false);
 
     if (buf) {
-        currentCursorImage.size    = buf->size;
+        currentCursorImage.size    = buf->getSize();
         currentCursorImage.pBuffer = buf;
     }
 

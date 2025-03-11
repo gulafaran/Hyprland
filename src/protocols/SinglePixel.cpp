@@ -67,9 +67,9 @@ CSinglePixelBufferResource::CSinglePixelBufferResource(uint32_t id, wl_client* c
     if UNLIKELY (!buffer->good())
         return;
 
-    buffer->resource->buffer = buffer;
+    buffer->getResource()->buffer = buffer;
 
-    listeners.bufferResourceDestroy = buffer->events.destroy.registerListener([this](std::any d) {
+    listeners.bufferResourceDestroy = buffer->getDestroyEvent().registerListener([this](std::any d) {
         listeners.bufferResourceDestroy.reset();
         PROTO::singlePixel->destroyResource(this);
     });

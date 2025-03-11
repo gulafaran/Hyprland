@@ -1,50 +1,76 @@
 #include "Buffer.hpp"
+#include "protocols/types/WLBuffer.hpp"
+#include <stdexcept>
 
-IHLBuffer::~IHLBuffer() {
-    if (locked() && resource)
-        sendRelease();
-}
+IHLBuffer::~IHLBuffer() {}
 
 void IHLBuffer::sendRelease() {
     resource->sendRelease();
 }
 
-void IHLBuffer::lock() {
-    nLocks++;
+const SP<CTexture>& IHLBuffer::getTexture() {
+    return texture;
 }
 
-void IHLBuffer::unlock() {
-    nLocks--;
-
-    ASSERT(nLocks >= 0);
-
-    if (nLocks == 0)
-        sendRelease();
+const SP<CWLBufferResource>& IHLBuffer::getResource() {
+    return resource;
 }
 
-bool IHLBuffer::locked() {
-    return nLocks > 0;
-}
-
-void IHLBuffer::onBackendRelease(const std::function<void()>& fn) {
-    if (hlEvents.backendRelease) {
-        hlEvents.backendRelease->emit(nullptr);
-        Debug::log(LOG, "backendRelease emitted early");
-    }
-
-    hlEvents.backendRelease = events.backendRelease.registerListener([this, fn](std::any) {
-        fn();
-        hlEvents.backendRelease.reset();
-    });
-}
-
-CHLBufferReference::CHLBufferReference(SP<IHLBuffer> buffer_, SP<CWLSurfaceResource> surface_) : buffer(buffer_), surface(surface_) {
-    buffer->lock();
-}
-
-CHLBufferReference::~CHLBufferReference() {
+CHLAttachedBuffer::CHLAttachedBuffer(SP<IHLBuffer> buffer_) : buffer(buffer_) {
     if (!buffer)
-        return;
+        throw std::runtime_error("Tried to create a CHLAttachedBuffer out of a null buffer");
+}
 
-    buffer->unlock();
+CHLAttachedBuffer::~CHLAttachedBuffer() {
+    const auto& resource = buffer->getResource();
+    if (resource)
+        resource->sendRelease();
+}
+
+Aquamarine::eBufferCapability CHLAttachedBuffer::caps() {
+    return buffer->caps();
+}
+
+Aquamarine::eBufferType CHLAttachedBuffer::type() {
+    return buffer->type();
+}
+
+void CHLAttachedBuffer::update(const CRegion& damage) {
+    buffer->update(damage);
+}
+
+bool CHLAttachedBuffer::isSynchronous() {
+    return buffer->isSynchronous();
+}
+
+bool CHLAttachedBuffer::good() {
+    return buffer->good();
+}
+
+void CHLAttachedBuffer::sendRelease() {
+    buffer->sendRelease();
+}
+
+bool CHLAttachedBuffer::getOpaque() {
+    return buffer->getOpaque();
+}
+
+Hyprutils::Math::Vector2D& CHLAttachedBuffer::getSize() {
+    return buffer->getSize();
+}
+
+Aquamarine::CAttachmentManager& CHLAttachedBuffer::getAttachments() {
+    return buffer->getAttachments();
+}
+
+Hyprutils::Signal::CSignal& CHLAttachedBuffer::getDestroyEvent() {
+    return buffer->getDestroyEvent();
+}
+
+const SP<CTexture>& CHLAttachedBuffer::getTexture() {
+    return buffer->getTexture();
+}
+
+const SP<CWLBufferResource>& CHLAttachedBuffer::getResource() {
+    return buffer->getResource();
 }

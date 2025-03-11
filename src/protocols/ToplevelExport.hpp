@@ -4,6 +4,7 @@
 #include "hyprland-toplevel-export-v1.hpp"
 #include "WaylandProtocol.hpp"
 #include "Screencopy.hpp"
+#include "protocols/types/Buffer.hpp"
 
 #include <vector>
 
@@ -55,7 +56,7 @@ class CToplevelExportFrame {
     bool                               m_ignoreDamage         = false;
     bool                               lockedSWCursors        = false;
 
-    WP<IHLBuffer>                      buffer;
+    WP<CHLAttachedBuffer>              buffer;
     bool                               bufferDMA    = false;
     uint32_t                           shmFormat    = 0;
     uint32_t                           dmabufFormat = 0;

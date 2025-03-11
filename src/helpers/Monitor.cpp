@@ -1280,20 +1280,20 @@ bool CMonitor::attemptDirectScanout() {
 
     const auto PSURFACE = g_pXWaylandManager->getWindowSurface(PCANDIDATE);
 
-    if (!PSURFACE || !PSURFACE->current.texture || !PSURFACE->current.buffer || PSURFACE->current.buffer->buffer.expired())
+    if (!PSURFACE || !PSURFACE->current.texture || !PSURFACE->current.buffer)
         return false;
 
     if (PSURFACE->current.bufferSize != vecPixelSize || PSURFACE->current.transform != transform)
         return false;
 
     // we can't scanout shm buffers.
-    const auto params = PSURFACE->current.buffer->buffer->dmabuf();
+    const auto params = PSURFACE->current.buffer->dmabuf();
     if (!params.success || !PSURFACE->current.texture->m_pEglImage /* dmabuf */)
         return false;
 
-    Debug::log(TRACE, "attemptDirectScanout: surface {:x} passed, will attempt, buffer {}", (uintptr_t)PSURFACE.get(), (uintptr_t)PSURFACE->current.buffer->buffer.get());
+    Debug::log(TRACE, "attemptDirectScanout: surface {:x} passed, will attempt, buffer {}", (uintptr_t)PSURFACE.get(), (uintptr_t)PSURFACE->current.buffer.get());
 
-    auto PBUFFER = PSURFACE->current.buffer->buffer.lock();
+    auto PBUFFER = PSURFACE->current.buffer;
     if (PBUFFER == output->state->state().buffer)
         return true;
 
@@ -1363,14 +1363,6 @@ bool CMonitor::attemptDirectScanout() {
         lastScanout = PCANDIDATE;
         Debug::log(LOG, "Entered a direct scanout to {:x}: \"{}\"", (uintptr_t)PCANDIDATE.get(), PCANDIDATE->m_szTitle);
     }
-
-    if (!PBUFFER->lockedByBackend || PBUFFER->hlEvents.backendRelease)
-        return true;
-
-    // lock buffer while DRM/KMS is using it, then release it when page flip happens since DRM/KMS should be done by then
-    // btw buffer's syncReleaser will take care of signaling release point, so we don't do that here
-    PBUFFER->lock();
-    PBUFFER->onBackendRelease([PBUFFER]() { PBUFFER->unlock(); });
 
     return true;
 }

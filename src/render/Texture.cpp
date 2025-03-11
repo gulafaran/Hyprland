@@ -27,7 +27,7 @@ CTexture::CTexture(const SP<Aquamarine::IBuffer> buffer, bool keepDataCopy) : m_
     if (!buffer)
         return;
 
-    m_bOpaque = buffer->opaque;
+    m_bOpaque = buffer->getOpaque();
 
     auto attrs = buffer->dmabuf();
 
