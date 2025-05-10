@@ -329,6 +329,7 @@ class CHyprOpenGLImpl {
     void                    initAssets();
     void                    initMissingAssetTexture();
     void                    useProgram(GLuint prog);
+    void                    createShaderVao(SShader& vao);
 
     //
     std::optional<std::vector<uint64_t>> getModsForFormat(EGLint format);

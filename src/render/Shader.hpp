@@ -32,6 +32,10 @@ struct SShader {
     GLint   discardAlpha      = -1;
     GLfloat discardAlphaValue = -1;
 
+    GLuint  shaderVao    = 0;
+    GLuint  shaderVboPos = 0;
+    GLuint  shaderVboUv  = 0;
+
     GLint   topLeft               = -1;
     GLint   bottomRight           = -1;
     GLint   fullSize              = -1;
