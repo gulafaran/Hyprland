@@ -4,11 +4,15 @@
 #include "../../config/ConfigWatcher.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 #include <ranges>
 
+#include <sys/eventfd.h>
 #include <sys/timerfd.h>
 #include <ctime>
+
+#include <poll.h>
 
 #include <aquamarine/backend/Backend.hpp>
 using namespace Hyprutils::OS;
@@ -19,18 +23,11 @@ CEventLoopManager::CEventLoopManager(wl_display* display, wl_event_loop* wlEvent
     m_timers.timerfd  = CFileDescriptor{timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC)};
     m_wayland.loop    = wlEventLoop;
     m_wayland.display = display;
+
+    initIoUring();
 }
 
 CEventLoopManager::~CEventLoopManager() {
-    for (auto const& [_, eventSourceData] : m_aqEventSources) {
-        wl_event_source_remove(eventSourceData.eventSource);
-    }
-
-    for (auto const& w : m_readableWaiters) {
-        if (w->source != nullptr)
-            wl_event_source_remove(w->source);
-    }
-
     if (m_wayland.eventSource)
         wl_event_source_remove(m_wayland.eventSource);
     if (m_idle.eventSource)
@@ -39,50 +36,20 @@ CEventLoopManager::~CEventLoopManager() {
         wl_event_source_remove(m_configWatcherInotifySource);
 }
 
-static int timerWrite(int fd, uint32_t mask, void* data) {
-    g_pEventLoopManager->onTimerFire();
-    return 1;
-}
-
-static int aquamarineFDWrite(int fd, uint32_t mask, void* data) {
-    auto POLLFD = sc<Aquamarine::SPollFD*>(data);
-    POLLFD->onSignal();
-    return 1;
-}
-
 static int configWatcherWrite(int fd, uint32_t mask, void* data) {
     g_pConfigWatcher->onInotifyEvent();
     return 0;
 }
 
-static int handleWaiterFD(int fd, uint32_t mask, void* data) {
-    if (mask & (WL_EVENT_HANGUP | WL_EVENT_ERROR)) {
-        Log::logger->log(Log::ERR, "handleWaiterFD: readable waiter error");
-        return 0;
-    }
-
-    if (mask & WL_EVENT_READABLE)
-        g_pEventLoopManager->onFdReadable(sc<CEventLoopManager::SReadableWaiter*>(data));
-
-    return 0;
-}
-
-void CEventLoopManager::onFdReadable(SReadableWaiter* waiter) {
-    auto it = std::ranges::find_if(m_readableWaiters, [waiter](const UP<SReadableWaiter>& w) { return waiter == w.get() && w->fd == waiter->fd && w->source == waiter->source; });
-
-    // ???
-    if (it == m_readableWaiters.end())
-        return;
-
-    UP<SReadableWaiter> taken = std::move(*it);
-    m_readableWaiters.erase(it);
-
-    if (taken->fn)
-        taken->fn();
-}
-
 void CEventLoopManager::enterLoop() {
-    m_wayland.eventSource = wl_event_loop_add_fd(m_wayland.loop, m_timers.timerfd.get(), WL_EVENT_READABLE, timerWrite, nullptr);
+    addOneShotPoll(m_timers.timerfd.get(), [this]() {
+        // IMPORTANT: We must read the timerfd to clear the 'readable' signal.
+        // If we don't, io_uring will trigger again immediately.
+        uint64_t expirations;
+        if (read(m_timers.timerfd.get(), &expirations, sizeof(expirations)) > 0) {
+            onTimerFire();
+        }
+    });
 
     if (const auto& FD = g_pConfigWatcher->getInotifyFD(); FD.isValid())
         m_configWatcherInotifySource = wl_event_loop_add_fd(m_wayland.loop, FD.get(), WL_EVENT_READABLE, configWatcherWrite, nullptr);
@@ -193,33 +160,127 @@ void CEventLoopManager::doLater(const std::function<void()>& fn) {
         &m_idle);
 }
 
-void CEventLoopManager::doOnReadable(CFileDescriptor fd, std::function<void()>&& fn) {
-    if (!fd.isValid() || fd.isReadable()) {
-        fn();
+void CEventLoopManager::initIoUring() {
+    io_uring_params params{};
+    params.flags = IORING_SETUP_SINGLE_ISSUER;
+
+    int ret = io_uring_queue_init_params(256, &m_io.ring, &params);
+    if (ret < 0) {
+        Log::logger->log(Log::ERR, "io_uring_queue_init_params failed: {}", ret);
         return;
     }
 
-    auto& waiter   = m_readableWaiters.emplace_back(makeUnique<SReadableWaiter>(nullptr, std::move(fd), std::move(fn)));
-    waiter->source = wl_event_loop_add_fd(g_pEventLoopManager->m_wayland.loop, waiter->fd.get(), WL_EVENT_READABLE, ::handleWaiterFD, waiter.get());
+    m_io.eventFd = CFileDescriptor{eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)};
+    if (!m_io.eventFd.isValid()) {
+        Log::logger->log(Log::ERR, "eventfd() failed");
+        io_uring_queue_exit(&m_io.ring);
+        return;
+    }
+
+    ret = io_uring_register_eventfd(&m_io.ring, m_io.eventFd.get());
+    if (ret < 0) {
+        Log::logger->log(Log::ERR, "io_uring_register_eventfd failed: {}", ret);
+        io_uring_queue_exit(&m_io.ring);
+        return;
+    }
+
+    m_io.eventSource = wl_event_loop_add_fd(
+        m_wayland.loop, m_io.eventFd.get(), WL_EVENT_READABLE,
+        [](int, uint32_t, void* data) {
+            sc<CEventLoopManager*>(data)->processRingCompletions();
+            return 1;
+        },
+        this);
+}
+
+void CEventLoopManager::processRingCompletions() {
+    // Drain eventfd
+    eventfd_t val;
+    while (read(m_io.eventFd.get(), &val, sizeof(val)) > 0) {}
+
+    io_uring_cqe*                 cqe;
+    unsigned                      head;
+    unsigned                      count = 0;
+
+    std::vector<SReadableWaiter*> finished;
+    io_uring_for_each_cqe(&m_io.ring, head, cqe) {
+        ++count;
+        auto* waiter = rc<SReadableWaiter*>(io_uring_cqe_get_data64(cqe));
+        if (!waiter)
+            continue;
+
+        if (cqe->res < 0) {
+            if (cqe->res != -ECANCELED) // Ignore cancellations
+                Log::logger->log(Log::ERR, "io_uring waiter poll error on fd {}: {}", waiter->fd(), cqe->res);
+        } else if (waiter->fn)
+            waiter->fn();
+
+        finished.push_back(waiter);
+    }
+
+    if (count)
+        io_uring_cq_advance(&m_io.ring, count);
+
+    for (auto* w : finished) {
+        if (w->rearm()) {
+            addOneShotPoll(w->fd(), std::move(w->fn));
+
+            if (m_aqPipelineWaiters.contains(w->fd()))
+                m_aqPipelineWaiters[w->fd()] = m_readableWaiters.back().get();
+        }
+
+        std::erase_if(m_readableWaiters, [&](const auto& up) { return up.get() == w; });
+    }
+}
+
+void CEventLoopManager::addOneShotPoll(CFileDescriptor fd, std::function<void()>&& fn) {
+    auto& waiter = m_readableWaiters.emplace_back(makeUnique<SReadableWaiter>(std::move(fd), std::move(fn)));
+    addWaiter(waiter);
+}
+
+void CEventLoopManager::addOneShotPoll(int fd, std::function<void()>&& fn) {
+    auto& waiter = m_readableWaiters.emplace_back(makeUnique<SReadableWaiter>(fd, std::move(fn)));
+    addWaiter(waiter);
+}
+
+void CEventLoopManager::addWaiter(Hyprutils::Memory::CWeakPointer<SReadableWaiter> waiter) {
+    io_uring_sqe* sqe = io_uring_get_sqe(&m_io.ring);
+    if (!sqe) {
+        m_readableWaiters.pop_back();
+        Log::logger->log(Log::ERR, "io_uring SQ full");
+        return;
+    }
+
+    io_uring_prep_poll_add(sqe, waiter->fd(), POLLIN);
+    io_uring_sqe_set_data64(sqe, rc<uint64_t>(waiter.get()));
+
+    if (io_uring_submit(&m_io.ring) < 0) {
+        Log::logger->log(Log::ERR, "io_uring_submit failed");
+        m_readableWaiters.pop_back();
+    }
 }
 
 void CEventLoopManager::syncPollFDs() {
     auto aqPollFDs = g_pCompositor->m_aqBackend->getPollFDs();
+    std::erase_if(m_aqPipelineWaiters, [&](const auto& item) {
+        int  monitoredFd = item.first;
+        bool stillExists = std::ranges::any_of(aqPollFDs, [&](const auto& p) { return p->fd == monitoredFd; });
 
-    std::erase_if(m_aqEventSources, [&](const auto& item) {
-        auto const& [fd, eventSourceData] = item;
-
-        // If no pollFD has the same fd, remove this event source
-        const bool shouldRemove = std::ranges::none_of(aqPollFDs, [&](const auto& pollFD) { return pollFD->fd == fd; });
-
-        if (shouldRemove)
-            wl_event_source_remove(eventSourceData.eventSource);
-
-        return shouldRemove;
+        if (!stillExists) {
+            SReadableWaiter* w = item.second;
+            std::erase_if(m_readableWaiters, [w](const auto& up) { return up.get() == w; });
+            return true;
+        }
+        return false;
     });
 
-    for (auto& fd : aqPollFDs | std::views::filter([&](SP<Aquamarine::SPollFD> fd) { return !m_aqEventSources.contains(fd->fd); })) {
-        auto eventSource         = wl_event_loop_add_fd(m_wayland.loop, fd->fd, WL_EVENT_READABLE, aquamarineFDWrite, fd.get());
-        m_aqEventSources[fd->fd] = {.pollFD = fd, .eventSource = eventSource};
+    for (auto& p : aqPollFDs) {
+        if (m_aqPipelineWaiters.contains(p->fd))
+            continue;
+
+        addOneShotPoll(p->fd, [pollFD = p] { pollFD->onSignal(); });
+
+        SReadableWaiter* newWaiter = m_readableWaiters.back().get();
+        m_aqPipelineWaiters[p->fd] = newWaiter;
     }
 }

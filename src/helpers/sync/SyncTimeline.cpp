@@ -77,7 +77,7 @@ bool CSyncTimeline::addWaiter(std::function<void()>&& waiter, uint64_t point, ui
         return false;
     }
 
-    g_pEventLoopManager->doOnReadable(std::move(eventFd), std::move(waiter));
+    g_pEventLoopManager->addOneShotPoll(std::move(eventFd), std::move(waiter));
 
     return true;
 }

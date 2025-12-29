@@ -8,6 +8,9 @@
 #include "../../helpers/signal/Signal.hpp"
 #include <hyprutils/os/FileDescriptor.hpp>
 
+#include <liburing.h>
+#include <list>
+
 #include "EventLoopTimer.hpp"
 
 namespace Aquamarine {
@@ -39,17 +42,23 @@ class CEventLoopManager {
     };
 
     struct SReadableWaiter {
-        wl_event_source*               source;
-        Hyprutils::OS::CFileDescriptor fd;
+        int                            notOwnedFd = -1;
+        Hyprutils::OS::CFileDescriptor ownedFd;
         std::function<void()>          fn;
 
-        SReadableWaiter(wl_event_source* src, Hyprutils::OS::CFileDescriptor f, std::function<void()> func) : source(src), fd(std::move(f)), fn(std::move(func)) {}
+        SReadableWaiter(Hyprutils::OS::CFileDescriptor f, std::function<void()> func) : ownedFd(std::move(f)), fn(std::move(func)) {}
+        SReadableWaiter(int f, std::function<void()> func) : notOwnedFd(f), fn(std::move(func)) {}
+        ~SReadableWaiter() = default;
 
-        ~SReadableWaiter() {
-            if (source) {
-                wl_event_source_remove(source);
-                source = nullptr;
-            }
+        int fd() {
+            if (notOwnedFd >= 0)
+                return notOwnedFd;
+
+            return ownedFd.get();
+        }
+
+        bool rearm() {
+            return notOwnedFd >= 0 && !ownedFd.isValid();
         }
 
         // copy
@@ -61,13 +70,14 @@ class CEventLoopManager {
         SReadableWaiter& operator=(SReadableWaiter&& other) noexcept = default;
     };
 
-    // schedule function to when fd is readable (WL_EVENT_READABLE / POLLIN),
-    // takes ownership of fd
-    void doOnReadable(Hyprutils::OS::CFileDescriptor fd, std::function<void()>&& fn);
-    void onFdReadable(SReadableWaiter* waiter);
+    void addOneShotPoll(Hyprutils::OS::CFileDescriptor fd, std::function<void()>&& fn);
+    void addOneShotPoll(int fd, std::function<void()>&& fn);
 
   private:
-    // Manages the event sources after AQ pollFDs change.
+    void initIoUring();
+    void processRingCompletions();
+    void addWaiter(Hyprutils::Memory::CWeakPointer<SReadableWaiter> waiter);
+
     void syncPollFDs();
     void nudgeTimers();
 
@@ -83,14 +93,20 @@ class CEventLoopManager {
     } m_wayland;
 
     struct {
+        io_uring                       ring;
+        Hyprutils::OS::CFileDescriptor eventFd;
+        wl_event_source*               eventSource = nullptr;
+    } m_io;
+
+    struct {
         std::vector<SP<CEventLoopTimer>> timers;
         Hyprutils::OS::CFileDescriptor   timerfd;
         bool                             recalcScheduled = false;
     } m_timers;
 
-    SIdleData                        m_idle;
-    std::map<int, SEventSourceData>  m_aqEventSources;
-    std::vector<UP<SReadableWaiter>> m_readableWaiters;
+    SIdleData                       m_idle;
+    std::list<UP<SReadableWaiter>>  m_readableWaiters;
+    std::map<int, SReadableWaiter*> m_aqPipelineWaiters;
 
     struct {
         CHyprSignalListener pollFDsChanged;
