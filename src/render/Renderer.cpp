@@ -2348,11 +2348,15 @@ void IHyprRenderer::handleFullscreenSettings(PHLMONITOR pMonitor) {
 bool IHyprRenderer::commitPendingAndDoExplicitSync(PHLMONITOR pMonitor) {
     handleFullscreenSettings(pMonitor);
 
-    auto deadline =
-        pMonitor->m_vrrActive || pMonitor->m_tearingState.activelyTearing || !pMonitor->m_estimatedNextVblank.has_value() ? Time::steadyNow() : pMonitor->m_estimatedNextVblank;
-    if (deadline) {
-        DRM::setDeadline(deadline.value(), m_currentBuffer.fence);
-        pMonitor->m_estimatedNextVblank = std::nullopt;
+    static const auto DEADLINE = CConfigValue<Hyprlang::INT>("render:deadline_main_buffer");
+
+    if (*DEADLINE) {
+        auto deadline =
+            pMonitor->m_vrrActive || pMonitor->m_tearingState.activelyTearing || !pMonitor->m_estimatedNextVblank.has_value() ? Time::steadyNow() : pMonitor->m_estimatedNextVblank;
+        if (deadline) {
+            DRM::setDeadline(deadline.value(), m_currentBuffer.fence);
+            pMonitor->m_estimatedNextVblank = std::nullopt;
+        }
     }
 
     bool ok = pMonitor->m_state.commit();

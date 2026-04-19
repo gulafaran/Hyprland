@@ -1706,6 +1706,18 @@ namespace Config::Supplementary {
             .type        = CONFIG_OPTION_INT,
             .data        = SConfigOptionDescription::SRangeData{.value = 2, .min = 0, .max = 2},
         },
+        {
+            .value       = "render:deadline_main_buffer",
+            .description = "Use experimental deadline on main buffer. 0 - disabled, 1 - on",
+            .type        = CONFIG_OPTION_INT,
+            .data        = SConfigOptionDescription::SRangeData{.value = 0, .min = 0, .max = 1},
+        },
+        {
+            .value       = "render:deadline_client_buffer",
+            .description = "Use experimental deadline on client buffer. 0 - disabled, 1 - on",
+            .type        = CONFIG_OPTION_INT,
+            .data        = SConfigOptionDescription::SRangeData{.value = 0, .min = 0, .max = 1},
+        },
 
         /*
      * cursor:
