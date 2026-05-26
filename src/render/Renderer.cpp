@@ -2402,6 +2402,20 @@ void IHyprRenderer::handleFullscreenSettings(PHLMONITOR pMonitor) {
 bool IHyprRenderer::commitPendingAndDoExplicitSync(PHLMONITOR pMonitor) {
     handleFullscreenSettings(pMonitor);
 
+    if (!explicitSyncSupported())
+        m_usedAsyncBuffers.clear(); // release all buffer refs and hope implicit sync works
+    else if (pMonitor->m_inFence.isValid()) {
+        // release buffer refs with release points now, since syncReleaser handles actual buffer release based on EGLSync
+        std::erase_if(m_usedAsyncBuffers, [](const auto& buf) { return !buf->m_syncReleasers.empty(); });
+
+        // release buffer refs without release points when EGLSync sync_file/fence is signalled
+        g_pEventLoopManager->doOnReadable(pMonitor->m_inFence.duplicate(), [prevbfs = std::move(m_usedAsyncBuffers)]() mutable { prevbfs.clear(); });
+        m_usedAsyncBuffers.clear();
+    } else {
+        Log::logger->log(Log::DEBUG, "Monitor state commit called but no valid inFence to drop buffers??");
+        m_usedAsyncBuffers.clear(); // release all buffer refs and hope implicit sync works
+    }
+
     bool ok = pMonitor->m_state.commit();
     if (!ok) {
         if (pMonitor->m_inFence.isValid()) {

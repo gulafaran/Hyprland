@@ -117,7 +117,6 @@ void CHyprGLRenderer::endRender(const std::function<void()>& renderingDoneCallba
         else
             glFlush(); // mark an implicit sync point
 
-        m_usedAsyncBuffers.clear(); // release all buffer refs and hope implicit sync works
         if (renderingDoneCallback)
             renderingDoneCallback();
 
@@ -132,25 +131,17 @@ void CHyprGLRenderer::endRender(const std::function<void()>& renderingDoneCallba
             }
         }
 
-        // release buffer refs with release points now, since syncReleaser handles actual buffer release based on EGLSync
-        std::erase_if(m_usedAsyncBuffers, [](const auto& buf) { return !buf->m_syncReleasers.empty(); });
-
-        // release buffer refs without release points when EGLSync sync_file/fence is signalled
-        g_pEventLoopManager->doOnReadable(eglSync->fd().duplicate(), [renderingDoneCallback, prevbfs = std::move(m_usedAsyncBuffers)]() mutable {
-            prevbfs.clear();
+        g_pEventLoopManager->doOnReadable(eglSync->fd().duplicate(), [renderingDoneCallback]() {
             if (renderingDoneCallback)
                 renderingDoneCallback();
         });
-        m_usedAsyncBuffers.clear();
 
         if (m_renderMode == RENDER_MODE_NORMAL) {
             PMONITOR->m_inFence = eglSync->takeFd();
             PMONITOR->m_output->state->setExplicitInFence(PMONITOR->m_inFence.get());
         }
     } else {
-        Log::logger->log(Log::ERR, "renderer: Explicit sync failed, releasing resources");
-
-        m_usedAsyncBuffers.clear(); // release all buffer refs and hope implicit sync works
+        Log::logger->log(Log::ERR, "renderer: Explicit sync failed, calling renderingDoneCallback anyways");
         if (renderingDoneCallback)
             renderingDoneCallback();
     }
