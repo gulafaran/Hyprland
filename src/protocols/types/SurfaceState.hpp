@@ -4,6 +4,7 @@
 #include "../../helpers/time/Time.hpp"
 #include "../../managers/eventLoop/EventLoopTimer.hpp"
 #include "../WaylandProtocol.hpp"
+#include "../PresentationTime.hpp"
 #include "./Buffer.hpp"
 
 namespace Render {
@@ -52,6 +53,7 @@ struct SSurfaceState {
             bool acquire : 1;
             bool acked : 1;
             bool frame : 1;
+            bool presentation : 1;
             bool fifo : 1;
         } bits;
     } updated;
@@ -74,7 +76,8 @@ struct SSurfaceState {
     Vector2D ackedSize;
 
     // for wl_surface::frame callbacks.
-    std::vector<SP<CWLCallbackResource>> callbacks;
+    std::vector<SP<CWLCallbackResource>>   callbacks;
+    std::vector<WP<CPresentationFeedback>> presentationFeedbacks;
 
     // viewporter protocol surface state
     struct {

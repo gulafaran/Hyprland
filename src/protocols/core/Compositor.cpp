@@ -727,19 +727,25 @@ void CWLSurfaceResource::updateCursorShm(CRegion damage) {
 void CWLSurfaceResource::presentFeedback(const Time::steady_tp& when, PHLMONITOR pMonitor, bool discarded) {
     frame(when);
 
-    auto FEEDBACK = makeUnique<CQueuedPresentationData>(m_self.lock());
-    FEEDBACK->attachMonitor(pMonitor);
+    if (m_current.presentationFeedbacks.empty()) // ensures we dont add multiple feedbacks because of being rendered multiple times in elementrenderer
+        return;
+
+    auto data = CQueuedPresentationData(m_self.lock());
+    data.attachMonitor(pMonitor);
     if (discarded)
-        FEEDBACK->discarded();
+        data.discarded();
     else {
-        FEEDBACK->presented();
+        data.presented();
         if (!pMonitor->m_lastScanout.expired()) {
             const auto WINDOW = m_hlSurface ? Desktop::View::CWindow::fromView(m_hlSurface->view()) : nullptr;
             if (WINDOW == pMonitor->m_lastScanout)
-                FEEDBACK->setPresentationType(true);
+                data.setPresentationType(true);
         }
     }
-    PROTO::presentation->queueData(std::move(FEEDBACK));
+
+    data.addFeedbacks(std::move(m_current.presentationFeedbacks));
+    PROTO::presentation->queueData(m_self, std::move(data));
+    m_current.presentationFeedbacks.clear();
 }
 
 CWLCompositorResource::CWLCompositorResource(SP<CWlCompositor> resource_) : m_resource(resource_) {
